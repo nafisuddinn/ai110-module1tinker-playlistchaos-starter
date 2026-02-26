@@ -22,6 +22,20 @@ def init_state():
     if "history" not in st.session_state:
         st.session_state.history = []
 
+    # Stable widget state (prevents "double-click" / reset behavior)
+    profile = st.session_state.profile
+    st.session_state.setdefault("profile_name", str(profile.get("name", "")))
+    st.session_state.setdefault("profile_hype_min_energy", int(profile.get("hype_min_energy", 7)))
+    st.session_state.setdefault("profile_chill_max_energy", int(profile.get("chill_max_energy", 3)))
+    st.session_state.setdefault("profile_favorite_genre", profile.get("favorite_genre", "rock"))
+    st.session_state.setdefault("profile_include_mixed", bool(profile.get("include_mixed", True)))
+
+    st.session_state.setdefault("add_title", "")
+    st.session_state.setdefault("add_artist", "")
+    st.session_state.setdefault("add_genre", "rock")
+    st.session_state.setdefault("add_energy", 5)
+    st.session_state.setdefault("add_tags", "")
+
 
 def default_songs():
     """Return a default list of songs."""
@@ -189,37 +203,41 @@ def profile_sidebar():
 
     profile = st.session_state.profile
 
-    profile["name"] = st.sidebar.text_input(
-        "Profile name",
-        value=str(profile.get("name", "")),
-    )
+    st.sidebar.text_input("Profile name", key="profile_name")
 
     col1, col2 = st.sidebar.columns(2)
     with col1:
-        profile["hype_min_energy"] = st.sidebar.slider(
+        st.slider(
             "Hype min energy",
             min_value=1,
             max_value=10,
-            value=int(profile.get("hype_min_energy", 7)),
+            key="profile_hype_min_energy",
         )
     with col2:
-        profile["chill_max_energy"] = st.sidebar.slider(
+        st.slider(
             "Chill max energy",
             min_value=1,
             max_value=10,
-            value=int(profile.get("chill_max_energy", 3)),
+            key="profile_chill_max_energy",
         )
 
-    profile["favorite_genre"] = st.sidebar.selectbox(
+    st.sidebar.selectbox(
         "Favorite genre",
         options=["rock", "lofi", "pop", "jazz", "electronic", "ambient", "other"],
-        index=0,
+        key="profile_favorite_genre",
     )
 
-    profile["include_mixed"] = st.sidebar.checkbox(
+    st.sidebar.checkbox(
         "Include Mixed playlist in views",
-        value=bool(profile.get("include_mixed", True)),
+        key="profile_include_mixed",
     )
+
+    # Sync widget values back to profile object
+    profile["name"] = st.session_state.profile_name
+    profile["hype_min_energy"] = st.session_state.profile_hype_min_energy
+    profile["chill_max_energy"] = st.session_state.profile_chill_max_energy
+    profile["favorite_genre"] = st.session_state.profile_favorite_genre
+    profile["include_mixed"] = st.session_state.profile_include_mixed
 
     st.sidebar.write("Current profile:", profile["name"])
 
@@ -228,16 +246,20 @@ def add_song_sidebar():
     """Render the Add Song controls in the sidebar."""
     st.sidebar.header("Add a song")
 
-    title = st.sidebar.text_input("Title")
-    artist = st.sidebar.text_input("Artist")
-    genre = st.sidebar.selectbox(
-        "Genre",
-        options=["rock", "lofi", "pop", "jazz", "electronic", "ambient", "other"],
-    )
-    energy = st.sidebar.slider("Energy", min_value=1, max_value=10, value=5)
-    tags_text = st.sidebar.text_input("Tags (comma separated)")
+    # Form avoids constant reruns while typing/clicking in sidebar fields
+    with st.sidebar.form("add_song_form", clear_on_submit=True):
+        title = st.text_input("Title", key="add_title")
+        artist = st.text_input("Artist", key="add_artist")
+        genre = st.selectbox(
+            "Genre",
+            options=["rock", "lofi", "pop", "jazz", "electronic", "ambient", "other"],
+            key="add_genre",
+        )
+        energy = st.slider("Energy", min_value=1, max_value=10, key="add_energy")
+        tags_text = st.text_input("Tags (comma separated)", key="add_tags")
+        submitted = st.form_submit_button("Add to playlist")
 
-    if st.sidebar.button("Add to playlist"):
+    if submitted:
         raw_tags = [t.strip() for t in tags_text.split(",")]
         tags = [t for t in raw_tags if t]
 
@@ -248,6 +270,7 @@ def add_song_sidebar():
             "energy": energy,
             "tags": tags,
         }
+
         if title and artist:
             normalized = normalize_song(song)
             all_songs = st.session_state.songs[:]
